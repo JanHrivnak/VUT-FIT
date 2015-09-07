@@ -1,0 +1,14 @@
+2. Projekt do předmětu FLP
+Zadání: Turingův stroj
+Autor: Jan Hrivnák (xhrivn01)
+Date: 05/2015
+-------------------------------
+Tento projekt provádí simulaci běhu nedeterministického Turingova stroje (TS).
+Běh začíná funkcí "start", která nejdříve načte vstup dle zadaného formátu (Pravidla jsou na samostatných řádcích a jednotlivé znaky jsou odděleny mezerami, Obsah pásky je bez oddělovačů zapsán na posledním řádku vstupu).
+Jádrem implementace je funkce "simulace", která se rekurzivně volá do té doby než TS přejde do stavu "F" nebo nedojde k abnormálnímu ukončení. Funkce dostává řetězec s aktuálním stavem pásky a list s pravidly na základě čehož provede jeden "krok".
+Jednotlivé funkce jsou pojmenovány tak, že by jejich činnost měla být samo-vysvětlitelná i bez komentáře.
+
+Možné výstupy:
+-Pravidlo provede posun doleva na nepovoleném místě (když je Stav prvním znakem na pásce) => Vypíše se chyba a výpočet se ukončí
+-TS přejde v pořádku do koncového stavu => program vypíše posloupnost konfigurací, která vede k výsledku
+-TS nezastaví => program se neukončí a skončí až na nedostatek paměti

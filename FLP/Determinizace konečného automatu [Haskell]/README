@@ -1,0 +1,12 @@
+Projekt č. 1 do předmětu FLP
+Autor: Jan Hrivnák
+Zadání: rka2dka - převod rozšířeného konečného automatu na deterministický
+Datum: 04/2015
+---------------------------
+K převodu automatu je použit algoritmus prezentovaný v předmětu IFJ.
+1. Nejdříve se zjistí epsilon uzávěry všech stavů (fce getEpsUzavery) --výpisu epsilon uzávěrů případně dosáhneme odkomentováním řádku 28 a zakomentováním řádku 30
+2. Odstraní se epsilon pravidla a automat se převede na "KA bez epsilon přechodů" (funkce odstranEpsilon) --jeho výpis dostaneme po odkomentovani řádku 29 a zakomentování řádku 30
+3. Automat je převeden na deterministický (funkce determinizace)
+(informace o možnosti výpisu pomocných informací při řešení uvádím pouze pro případné konzultace či reklamace, kdyby moje řešení nefungovalo na oficiálních testech)
+
+Zdrojové soubory byly rozděleny do dvou modulů, kde v jednom (main.hs) je samotný program a ve druhém (KAdata.hs) jsou definovány datové struktury, které program využívá
