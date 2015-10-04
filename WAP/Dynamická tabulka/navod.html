@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="cs">
+    <head>
+        <title>Návod k použití projektu do předmětu WAP - xhrivn01</title>
+        <meta charset="utf-8" />
+        <meta name="description" content="Návod pro projekt WAP" />
+        <meta name="author" content="Jan Hrivnák" />
+    </head>
+    <body>
+        <h1>Návod k použití projektu do WAP</h1>
+        <h3>Autor: Jan Hrivnák (xhrivn01)</h3>
+        <p>
+            Účelem tohoto projektu do předmětu WAP je:
+        </p>
+        <ul>
+            <li>Umožnit seřadit tabulku podle číselné hodnoty v některém ze sloupců</li>
+            <li>Umožnit seřadit tabulku podle textové hodnoty v některém ze sloupců</li>
+            <li>Umožnit zobrazit pouze ty řádky tabulky, jejichž hodnoty v daných slopcích obsahují zadaný podřetězec</li>
+        </ul>
+        <p>
+            Princip funkčnosti projektu je zřejmý z komentářů ve zdrojovém kódu<br>
+            Nejdříve se po načtení stránky zavolá funkce <b>upravTabulku</b>, která k tabulce s ID="<i>zpracuj</i>" přidá novou hlavičky s ovládacími prvky. <br>
+            Dále skript obsahuje dvě funce. Konkrétně <b>inputChange</b>, která se vyvolá po každé změně inputu na stránce a která skryje/zobrazí řádky tabulky podle zadání<br>
+            Poslendí funkcí je <b>mySort</b>, která aktuálně zobrazené řádky v tabulce seřadí vzestupně nebo sestupně.<br>
+        V zadání nebylo přesně zadáno, zda se mají řetězce vyhledávat na přesnou shodu či nikoliv. Aktuálně skript vyhledává řetězce na přesnou shodu a je tedy CaseSensitive. V případě, že bychom velikost písmen nechtěli řešit, tak postačí na konec řádků 64 a 66 přidat .toLowerCase()
+        </p>
+        <p>
+            Pro ukázku funčnosti skriptu je připravena <a href="./demo.html">ukázková stránka</a>.<br>
+            V případě nasazení na jinou zdrojovou tabulku je potřeba kromě importu JS a CSS souboru potřeba tabulce kterou chceme řadit/filtrovat přidat parametr ID="zpracuj". <br>
+            Všechny sloupce jsou jako výchozí možnost řazeny jako text. Změna se provede přidáním parametru <i>data-type="int"</i> v hlavičce (thead) ke každému prvku "td", jenž označuje sloupec, který má být řazen jako číslo. Tento případ je naznačen na ukázkové stránce (sloupce 4 a 5 se stejným obsahem jsou řazeny jednou jako číslo a jednou jako text)
+        </p>
+    </body>
+</html>

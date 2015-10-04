@@ -1,0 +1,43 @@
+
+body{
+    font-size: 15px;
+}
+
+/*format samotne tabulky, kterou zpracovavame*/
+table#zpracuj{ 
+    min-width: 50%;
+    border-collapse: collapse;
+}
+table#zpracuj tr td{
+    line-height: 30px;
+    height: 30px;
+    padding: 0 5px;
+}
+
+/*format hlavicky a paticky tabulky*/
+table#zpracuj thead, table#zpracuj tfoot{ 
+    font-weight: bold;
+    background: #ddd;
+    line-height: 35px;
+    height: 35px;
+    border: 1px solid #aaa;
+}
+
+/*format nasi vkladane hlavicky slouzici k filtrovani*/
+table#zpracuj #sortableHead{ 
+    background: #44B449;
+    line-height: 40px;
+    height: 40px;    
+}
+
+/*"ikony" sipek pro */
+table#zpracuj #sortableHead .sort{ 
+    font-size: 20px;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 0 5px;
+}
+table#zpracuj #sortableHead div{
+    float: left;
+}
+
