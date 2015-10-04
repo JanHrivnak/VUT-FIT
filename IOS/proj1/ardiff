@@ -1,0 +1,337 @@
+#!/bin/sh
+# Autor: Jan Hrivnak, xhrivn01@stud.fit.vutbr.cz
+# Skript slouzi k zjistovani rozdilnych souboru ze dvou archivu, vytvareni rozdiloveho achivu a aplikaci tohoto archivu pro ziskani puvodnich souboru
+export LC_ALL=C
+l_opt=false
+c_opt=false
+p_opt=false
+r_opt=false
+o_opt=false
+bad_opt=false
+napoveda="ardiff vypisuje zmeny archivu, vytvari rozdilovy archiv nebo aplikuje rozdilovy 
+archiv na zdrojovy archiv.
+Pouziti: ardiff [volby] archiv1 archiv2
+Volby:
+  -o SOUBOR  Pokud je cilem skriptu vytvorit archiv, bude vytvoren do souboru
+             se jmenem SOUBOR (plati pro -c a -p).
+  -l         Vypis seznamu souboru, ktere se v zadanych archivech lisi.
+  -c         Vytvoreni rozdiloveho archivu.
+  -p         Aplikace rozdiloveho archivu (argument archiv2) na zdrojovy archiv
+             (argument archiv1).
+  -r         Prepnuti do reverzniho rezimu (plati pro -p)."
+
+konec(){ #funkce je volana v pripade potreby ukoncit program. Jejim ukolem je smazat docasne soubory a ukoncit program s prislusnym navratovym kodem
+rm -rf "$temp"
+exit "$1"
+}
+
+#osetreni signalu- s libovolnym prichozim signalem ktery ma vychozi akci A (ukonceni programu) se zavola fce ktera smaze docasne soubory v /tmp/ a ukonci program
+trap signal_konec INT ; trap signal_konec HUP ; trap signal_konec QUIT ; trap signal_konec ILL
+trap signal_konec KILL ; trap signal_konec PIPE ; trap signal_konec ALRM ; trap signal_konec TERM
+signal_konec()
+{
+    printf "\nZachycen signal pro ukonceni skriptu \n"    
+    printf "Program nyni smaze vsechny docasne soubory a ukonci se! \n"
+    konec 1
+}
+
+temp=`mktemp -d /tmp/xhrivn01.XXXXX` # vytvoreni Temp adresare pro ukladani docasnych souboru
+if [ $? -ne 0 ] ; then
+    printf "Nepodarilo se vytvorit docasnou slozky, disk je plny nebo nemate dostatecna prava" >&2
+    exit 1
+fi
+
+######################################################### zabaleni archivu #################################################
+zabal_archiv(){ #fce pouziva pri pouziti parametru -c nebo -p pro zabaleni vysledne slozky do archivu daneho nazvu a typu
+ case "$koncovka" in
+    zip) (cd "$2"        
+          zip -qr - ./ ) >"$1" ;;
+    tar) tar -cf "$1" -C "$2" . ;;
+    gz) tar -czf "$1" -C "$2" . ;;
+    tgz) tar -czf "$1" -C "$2" . ;;
+    bz2) tar -cjf "$1" -C "$2" . ;;
+    *) printf "soubor -o ktery ma byt tvoren ma neznamou priponu \n" >&2
+        konec 1 ;;
+  esac
+}
+######################################################### rozbaleni archivu #################################################
+# fce vytvari docasne soubory a extrahuje do nich zadane archivy podle typu pripony
+rozbal_soubory(){ 
+	typ1=`file "$1"| sed 's/^[^:]*:[[:space:]]*\([^ ]*\)\([^\\]*\)/\1/g' | tr '[:upper:]' '[:lower:]'`
+	typ2=`file "$2"| sed 's/^[^:]*:[[:space:]]*\([^ ]*\)\([^\\]*\)/\1/g' | tr '[:upper:]' '[:lower:]'`
+
+    mkdir -p "$temp"/a/ #vytvoreni slozek do kterych se rozbaluji archivy se kterymi se pracuje
+    mkdir -p "$temp"/b/
+    touch "$temp"/vystup_l_problem # vytvareni souboru pro ukladani pomocnych informaci v prubeho zpracovani archivu
+    touch "$temp"/problem
+    touch "$temp"/vystup_l
+    touch "$temp"/vystup_l_no_problem
+
+	case "$typ1" in
+        zip) 
+            unzip -q "$1" -d "$temp/a/"  ;;
+        posix)
+            tar -xf "$1" -C "$temp/a/" ;;
+        gzip) 
+            tar -xzf "$1" -C "$temp/a/" ;;
+        bzip2)
+            tar -jxf "$1" -C "$temp/a/" ;;
+        *)  
+            printf "chyba pri praci se souborem 1, soubor bud neexistuje nebo je nepodporovaneho typu \n" >&2
+            konec 1 ;;
+    esac
+	case "$typ2" in
+        zip) 
+            unzip -q "$2" -d "$temp/b/"  ;;
+        posix)
+            tar -xf "$2" -C "$temp/b/" ;;
+        gzip) 
+            tar -xzf "$2" -C "$temp/b/" ;;
+        bzip2)
+            tar -jxf "$2" -C "$temp/b/" ;;
+        *)  
+            printf "chyba pri praci se souborem 2, soubor bud neexistuje nebo je nepodporovaneho typu \n" >&2
+            konec 1 ;;
+    esac
+}
+######################################################### prepinac L #################################################
+# funkce si necha rozbalit zadane archivy
+# pote pracuje se soubory v docasne adresari ve kterem take vyuziva nejruznejsi soubory pro zapamatovani prubeznych vysledku testovani
+# Hlavnim ukolem funkce je porovnat dve slozky a vypsat kompletni cesty jejich rozdilu
+# fce si poradi take s problemem kdy v jednom adresari je objekt se stejnym nazvem souborem a v druhem adresarem
+vytvor_seznam(){
+rozbal_soubory "$1" "$2"
+
+# Do souboru $temp/problem se uklada seznam konfliktnich cest ktere jsou v jednom archivu adresarem a ve druhem slozkou se stejnym nazvem
+# Do souboru $temp/vystup_l se uklada seznam cest bezkonfliktnich slozek
+    diff -aurN "$temp"/a "$temp"/b | grep "File "$temp"/a/" | sed "s_.* $temp/b/\(.*\) is a regular file_\1_g" | 
+        sed "s_.* $temp/b/\(.*\) is a regular empty file_\1_g" | sed "s_.* $temp/b/\(.*\) is a directory_\1_g" >$temp/problem
+    diff -aurN "$temp"/a "$temp"/b | grep 'diff -aurN' | sed "s_.* "$temp"/b/\(.*$\)_\1_g" >$temp/vystup_l
+
+    cat "$temp"/problem | while read problem;
+    do   # projdeme seznam konfliktnich cest a z archivu ve kterem je tato cesta adresarem vypiseme seznam souboru v tomto adresari 
+         # (nebot jsou jiste rozdilne oproti druhemu archivu ve kterem je puvodni cesta souborem a zadne podslozky a podsoubory mit nemuze)
+        if [ -d "$temp"/a/"$problem" ] && [ -f "$temp"/b/"$problem" ] ; then
+            find -L  "$temp"/a/"$problem" >"$temp"/l2
+        elif [ -f "$temp"/a/"$problem" ] && [ -d "$temp"/b/"$problem" ] ; then
+            find -L  "$temp"/b/"$problem" >"$temp"/l2
+        fi
+        # a upravime vystup predchoziho prikazu find do pozadovanho tvaru
+        cat "$temp"/l2 | sed "s_"$temp"/b/\(.*\)_\1_g" | sed "s_"$temp"/a/\(.*\)_\1_g" >>"$temp"/vystup_l_problem
+    done
+    cat "$temp"/vystup_l > "$temp"/vystup_l_no_problem # v tomto souboru si ukladam seznam nekonfliktnich cest pro dalsi pouziti v pripade ze funkce je volana jinou fci 
+    cat "$temp"/vystup_l_problem >>"$temp"/vystup_l # v tomto souboru zustane ulozen kompletni pozadovany seznam rozdilnych cest, ktery je pote ve volajici fci vytisknut uzivateli
+}
+
+#funkce vyuzivajici se k parametru -o
+# zjisti zda je soubor do ktereho se pozdeji bude vytvaret vysledny archiv zadan spravne
+# povoleny jsou koncovky zip, tar, tgz, tar.gz, tar.bz2
+# je povolena libovolna velikost pismen v koncovce
+zjisti_koncovku(){
+tecka=`echo "$1" | grep -c '..*\...*'`
+if [ "$tecka" -eq 1 ] ; then    # normalni koncovka 
+    koncovka=`echo "$1" | sed 's_.*\.\([^.]*$\)_\1_g' | tr '[:upper:]' '[:lower:]'`
+else
+    printf "Nazev archivu za parametrem -o je spatny \n" >&2
+    exit 1
+fi
+if [ "$koncovka" = "gz" ] || [ "$koncovka" = "bz2" ] ; then     # tar.gz || tar.bz2
+    tecka2=`echo "$1" | grep -c '..*\...*\..*'`
+    if [ "$tecka2" -eq 1 ] ; then
+        koncovka2=`echo "$1" | sed "s_.*\.\([^.]*\)\.[^.]*_\1_g" | tr '[:upper:]' '[:lower:]'`
+        if [ "$koncovka2" != "tar" ] ; then
+            printf "Nazev archivu za parametrem -o je spatny \n" >&2
+            exit 1
+        fi
+    else
+        printf "Nazev archivu za parametrem -o je spatny \n" >&2
+        exit 1
+    fi
+fi
+if [ "$koncovka" != "zip" ] && [ "$koncovka" != "tar" ] && [ "$koncovka" != "gz" ] && [ "$koncovka" != "tgz" ] && [ "$koncovka" != "bz2" ] ; then
+    printf "Nazev archivu za parametrem -o je spatny \n" >&2
+    exit 1
+fi
+}
+
+######################################################### prepinac C #################################################
+# Fce ze dvou zdrojovych archivu vytvori seznam zmen, ktere ve tvaru diff-vystupu ulozi do adresarove struktury odpovidajici obema zadanym archivum
+# Vyslednou strukturu zabali do pozadovaneho archivu
+prepinac_c(){
+vytvor_seznam "$1" "$2"
+zjisti_koncovku "$3" ###koncovka -o souboru
+
+    cat "$temp"/vystup_l | while read soubor;
+    do  
+        je_slozka=`echo "$soubor" | grep -c '/'`
+        if [ "$je_slozka" -eq 1 ] ; then
+            cesta=`echo "$soubor" | sed "s_\(.*/\)\([^/]*$\)_"$temp"/c/\1_g"`
+            mkdir -p "$cesta"
+            cesta2=`echo "$soubor" | sed "s_\(.*/\)\([^/]*$\)_"$temp"/prazdnaslozka/\1_g"`
+            mkdir -p "$cesta2"
+        fi
+    done
+    cat "$temp"/vystup_l_no_problem | while read soubor;
+    do
+        diff -aurN "$temp"/a/"$soubor" "$temp"/b/"$soubor" | sed "s_ "$temp"/_ _g" >"$temp"/c/"$soubor".patch
+    done
+
+    touch "$temp"/prazdnysoubor
+
+    cat "$temp"/problem | while read slozka;
+    do 
+        cat "$temp"/vystup_l_problem | sed "s_"$slozka"\$__g" | sed '/^$/d' >"$temp"/problem_slozka
+    done
+
+    cat "$temp"/problem | while read problem; #reseni problemu kdy je v jednom archivu slozka a ve druhem soubor se stejnym nazvem
+    do
+        if [ -d "$temp"/a/"$problem" ] ; then # v A je to slozka
+            diff -aurN "$temp"/prazdnysoubor "$temp"/b/"$problem" | sed "s_$temp/prazdnysoubor_a/"$problem"_g" |
+                                                                 sed "s_ $temp/b/_ b/_g" >"$temp"/c/"$problem".patch # vypsani souboru v dane ceste
+               cat "$temp"/problem_slozka | while read soubor;              # vypsani adresare v dane ceste
+               do
+                   cesta=`echo "$soubor" | sed 's_\(.*\)/[^/]*$_\1_g'`
+                   if [ "$cesta" = "$problem" ] ; then
+                       touch "$temp"/prazdnaslozka/"$soubor"
+                       diff -aurN "$temp"/a/"$soubor" "$temp"/prazdnaslozka/"$soubor" | sed "s%"$temp"/prazdnaslozka/%b/%g" | 
+                                                                 sed "s%"$temp"/a/%a/%g" >"$temp"/c/"$soubor".patch # vypsani souboru v dane ceste
+                   fi
+               done
+        elif [ -d "$temp"/b/"$problem" ] ; then # v B je to slozka
+            diff -aurN "$temp"/a/"$problem" "$temp"/prazdnysoubor | sed "s_"$temp"/prazdnysoubor_b/"$problem"_g" | 
+                    sed "s_ "$temp"/a/_ a/_g" >"$temp"/c/"$problem".patch
+               cat "$temp"/problem_slozka | while read soubor;              # vypsani adresare v dane ceste
+               do
+                   cesta=`echo "$soubor" | sed 's_\(.*\)/[^/]*$_\1_g'`
+                   if [ "$cesta" = "$problem" ] ; then
+                       touch "$temp"/prazdnaslozka/"$soubor"
+                       diff -aurN "$temp"/prazdnaslozka/"$soubor" "$temp"/b/"$soubor" | sed 's%"$temp"/prazdnaslozka/%a/%g' | 
+                            sed 's%"$temp"/b/%b/%g' >"$temp"/c/"$soubor".patch
+                   fi
+               done
+        fi
+    done
+zabal_archiv "$3" "$temp"/c #zabaleni vysledne slozky do archivu zadaneho jmena
+}
+
+######################################################### prepinac P-R #################################################
+# fce ma za ukol aplikovani rozdiloveho archivu
+# fce si necha rozbalit oba archivy, vytvori si seznam s obsahem rozdilove archivu, vybere z neho pouze ty cesty, ktere jsou soborem a nikoliv slozkou
+# vytvori odpovidajici cestu v prvnim adresari a pokud soubor v tomto adresari existuje, tak aplikuje patch
+# pokud neexistuje je nazev tohoto souboru ulozen do docasneho souboru
+# pote pri druhem pruchodu se prochazi pouze tyto problemove soubory
+prepinac_pr(){
+rozbal_soubory "$1" "$2"
+zjisti_koncovku "$3" ###koncovka -o souboru
+    find -L  "$temp"/b/ | while read radek; 
+    do
+       if [ -f "$radek" ] ; then  #odfiltrovani slozek z vypisu, zustanou jenom soubory *.patch
+            radek_a=`echo "$radek" | sed 's%\(..*\).patch%\1%g' | sed "s%"$temp"/b/%"$temp"/a/%g"` #vytvoreni odpovidajici adresy v prvnim archivu
+            if [ -e "$radek_a" ] ; then 
+                if [ -f "$radek_a" ] ; then
+                    if [ $r_opt = true ] ; then # na zaklade zadaneho ci nezadaneho parametru -r provedeme patch
+                                                # v pripade neuspech, napriklad pri pokusu patchovat nespravny soubor se program ukonci s chybou
+                        patch -fusER "$radek_a" "$radek" 2>/dev/null >&2
+                        if [ $? -ne 0 ] ; then
+                            printf "Doslo k chybe pri patchovani souboru \n" >&2
+                            exit 1
+                        fi
+                    else
+                        patch -fusE "$radek_a" "$radek" 2>/dev/null >&2
+                        if [ $? -ne 0 ] ; then
+                            printf "Doslo k chybe pri patchovani souboru \n" >&2
+                            exit 1
+                        fi
+                    fi
+                else 
+                    rm -rf "$radek_a"
+                fi
+            else
+                echo "$radek" >>"$temp"/problem
+            fi
+       fi
+    done
+cat "$temp"/problem | while read radek; do # druhym pruchodem dokoncime patchovani problemovych slozek
+    radek_a=`echo "$radek" | sed 's%\(..*\).patch%\1%g' | sed "s%"$temp"/b/%"$temp"/a/%g"`
+    slozka=`echo "$radek_a" | sed 's%\(..*\)/[^/]*%\1%g'`
+    mkdir -p "$slozka"
+    touch "$radek_a"
+    if [ $r_opt = true ] ; then
+        patch -fusER "$radek_a" "$radek" 2>/dev/null >&2
+        if [ $? -ne 0 ] ; then
+            printf "Doslo k chybe pri patchovani souboru" >&2
+            exit 1
+        fi
+    else
+        patch -fusE "$radek_a" "$radek" 2>/dev/null >&2
+        if [ $? -ne 0 ] ; then
+            printf "Doslo k chybe pri patchovani souboru" >&2
+            exit 1
+        fi
+    fi
+done
+zabal_archiv "$3" "$temp"/a # zabaleni vysledne slozky do pozadovaneho archivu
+}
+
+######################################################### GETOPTS #################################################
+while getopts ':o:lcpr' opt; do
+  case "$opt" in
+    l)
+        l_opt=true ;;
+    c)
+      c_opt=true ;;
+    p)
+      p_opt=true ;;
+    r)
+      r_opt=true ;;
+    o)
+      o_opt=true
+      o_arg=$OPTARG ;;
+    *)
+      bad_opt=true ;;
+  esac
+done
+# ziskani nazvu poslednich dvou parametru-archivu
+  for p in "$@"
+    do
+        prvni_soubor="$druhy_soubor"
+        druhy_soubor="$p"
+    done
+if [ "$prvni_soubor" = "" ] || [ "$druhy_soubor" = "" ] ; then
+    printf "spatne zadane soubory \n" >&2
+    printf "$napoveda"
+    exit 1
+fi
+#########################################################END GETOPTS#################################################
+# kostra skriptu, osetreni podminek
+# povolene kombinace: -l , -co , -po , -pro
+# pri jine kombina je zobrazena napoveda s pripadnou chybovou hlaskou
+if $r_opt; then
+    if [ $p_opt = false ] ; then
+	   printf "r-chybi parametr -p, nemam co vykonat \n" >&2
+	   printf "$napoveda"
+	   exit 1
+	fi
+fi
+if $l_opt; then
+	vytvor_seznam "$prvni_soubor" "$druhy_soubor"
+    cat "$temp"/vystup_l
+elif $c_opt; then
+	if [ $o_opt = false ] ; then
+	   printf "c-chybi parametr -o s nazvem souboru \n" >&2
+	   printf "$napoveda"
+	   exit 1
+	fi
+   prepinac_c "$prvni_soubor" "$druhy_soubor" "$o_arg"
+elif $p_opt; then
+	if [ $o_opt = false ] ; then
+	   printf "p-chybi parametr -o s nazvem souboru \n" >&2
+	   printf "$napoveda"
+	   exit 1
+	fi
+    prepinac_pr "$prvni_soubor" "$druhy_soubor" "$o_arg"
+elif $bad_opt || [ $OPTIND = 1 ] ; then
+  echo "$napoveda"
+fi
+konec 0
+

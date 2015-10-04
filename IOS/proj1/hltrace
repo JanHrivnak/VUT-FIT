@@ -1,0 +1,67 @@
+#!/bin/sh
+# Autor: Jan Hrivnak, xhrivn01@stud.fit.vutbr.cz
+# skript slozi ke zvyraznovani syntaxe v kodu
+# v pripade ze je skript spusten bez vstupniho souboru netisknu napovedu z duvodu ocekavani rucniho zadani dat ci presmerovani vstupu napriklad rourou
+
+export LC_ALL=C
+if [ "$1" = "-h" ] ; then   # zobrazeni napovedy
+	echo "hltrace zvyrazni syntax stopy od strace.
+	Pouziti: hltrace [-s SYSCALL] <vstup.strace >vystup.html"
+else
+# vloreni hlavicky do vysledneho souboru
+echo "<html>
+<style>
+.pid { color:darkred; }
+.ts { color:navy; }
+.number { color:red; }
+.const { color:green; }
+.string { color:blue; }
+.hlcall { text-decoration:none; font-weight:bold; color:black; }
+.call { text-decoration:none; color:olive; }
+
+</style>
+<body><pre>"
+
+# osetreni zda byl zadan parametr -s
+if [ "$1" = "-s" ] ; then
+    if [ $2 = false ] ; then
+        syscall="_________________________"
+	else
+		syscall="$2"
+	fi
+else
+	syscall="___________________________"
+fi
+
+	cat | sed 's/&/\&amp;/g' | sed 's/>/\&gt;/g' | sed 's/</\&lt;/g' |  						#nahrazeni < > &
+
+    sed 's/\\"/<lomeno-uvozovka>/g' |                # nahrazeni \" za <lomeno-uvozovka> z duvodu lepsiho oznacovani textovych retezcu v uvozovkach
+	sed 's/\("[^"]*"\)/<span class=\"string\">\1<\/span>/g' |  								#string
+    sed 's/<lomeno-uvozovka>/\\"/g' |	            # vraceni \" zpet
+
+	sed "s/"$syscall"(/<a href=\"http:\/\/www.kernel.org\/doc\/man-pages\/online\/pages\/man2\/"$syscall"\.2\.html\" class=\"hlcall\">"$syscall"<\/a>(/g" |  #hlcall
+	
+# nektere z nasledujicich kroku jsou vice rozepsany z duvody spravne kompatibility na vsech typech systemu
+# nektere servery nezpracovavali v poradku pokud jsem mel tyto prikazy zkracene zapsany v jednom sed-u
+	sed 's/\(^[0-9][0-9]*[^.]\)/<span class=\"pid\">\1<\/span>/g' | 								 #pid
+	sed 's/\([(,]\)\(-\{0,1\}[0-9][0-9]*\)\([ ,)]\)/\1<span class=\"number\">\2<\/span>\3/g' | 		#number
+	sed 's/\([(, ]\)\(-\{0,1\}[0-9][0-9]*\)\([,)]\)/\1<span class=\"number\">\2<\/span>\3/g' | 		#number
+	sed 's/= \(-\{0,1\}[0-9][0-9]*\) /= <span class=\"number\">\1<\/span> /g' | 					#number
+	sed 's/\([(, ]\)\(-\{0,1\}[0-9][0-9]*\)\($\)/\1<span class=\"number\">\2<\/span>\3/g' |			#number
+
+	sed 's/\([(, ]\)\(0x[a-fA-F0-9]*\)\([ ,)]\)/\1<span class=\"number\">\2<\/span>\3/g' | 			#number hexa
+	sed 's/\([(, ]\)\(0x[a-fA-F0-9]*\)\($\)/\1<span class=\"number\">\2<\/span>\3/g' |              #number hexa
+
+	sed 's/\([\`=|([{]\)\([[:upper:]][_0-9[:upper:]]*\)\([^[:lower:]"\\]\)/\1<span class=\"const\">\2<\/span>\3/g' |            # const
+	sed 's/\([ ]\)\([[:upper:]][_0-9[:upper:]]*\)\([^[:lower:]"\\]\)/\1<span class=\"const\">\2<\/span>\3/g' |                  # const
+	sed 's/\([ ]\)\([[:upper:]][_0-9[:upper:]]*\)\([ ]\)/\1<span class=\"const\">\2<\/span>\3/g' |                              # const
+	sed 's/\([|]\)\([[:upper:]][_0-9[:upper:]]*\)\([^[:lower:]"\\]\)/\1<span class=\"const\">\2<\/span>\3/g' |                  # const
+
+	sed 's_\(^[a-zA-Z][a-zA-Z0-9_]*\)(_<a href=\"http://www.kernel.org/doc/man-pages/online/pages/man2/\1\.2\.html\" class=\"call\">\1</a>(_g' |    #call
+	sed 's_ \([a-zA-Z][a-zA-Z0-9_]*\)(_ <a href=\"http://www.kernel.org/doc/man-pages/online/pages/man2/\1\.2\.html\" class=\"call\">\1</a>(_g' |   #call
+
+	sed 's/\([[:space:]]\)\([0-9][.][0-9]*\)\([ ]\)/\1<span class=\"ts\">\2<\/span>\3/g' 							#ts
+	
+	echo "</pre></body></html>" # vlozeni paticky do vystupniho souboru
+fi
+exit 0
